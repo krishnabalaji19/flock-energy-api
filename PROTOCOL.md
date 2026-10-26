@@ -37,3 +37,9 @@
 - A request named `keys` returns {"data":{"signingSecret": ...}} first
 - page=1 returns the whole dataset (403 records, 231,658 bytes, {data,total});
   the UI's saved file is the same data pretty-printed as a bare array
+
+- /portal/export ignores `page`: any value returns the full 403-record dataset
+- Signature includes the query string as sent; timestamp must be fresh
+  (a 600 s old timestamp is rejected with 401; exact window not measured)
+- A 401 can mean "no session" ({"error":"unauthorized"}) or a rejected signature;
+  only the former should trigger a re-login

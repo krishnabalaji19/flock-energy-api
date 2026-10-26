@@ -57,15 +57,26 @@ export class PortalClient {
     }
   }
 
-  // GET a portal JSON path. If the session is missing or rejected (401), log in once and retry.
+  #send(path, headers) {
+    return this.#fetch(path, { headers: { cookie: this.#cookie, ...headers } });
+  }
+
+  async #errorCode(res) {
+    try { return (await res.clone().json()).error ?? 'unknown'; } catch { return 'unknown'; }
+  }
+
   async get(path, headers = {}) {
     if (!this.#cookie) await this.#login();
-    let res = await this.#fetch(path, { headers: { cookie: this.#cookie, ...headers } });
-    if (res.status === 401) {
+    let res = await this.#send(path, headers);
+    // Only log in again when the SESSION is the problem, not for any 401.
+    if (res.status === 401 && (await this.#errorCode(res)) === 'unauthorized') {
       await this.#login();
-      res = await this.#fetch(path, { headers: { cookie: this.#cookie, ...headers } });
+      res = await this.#send(path, headers);
     }
     if (res.status === 404) throw new PortalError('Not found', 'not_found', 404);
+    if (res.status === 401 || res.status === 403) {
+      throw new PortalError(`Portal rejected the request: ${await this.#errorCode(res)}`, 'rejected', res.status);
+    }
     if (!res.ok) throw new PortalError(`Portal returned ${res.status}`, 'bad_response', res.status);
     try {
       return await res.json();
