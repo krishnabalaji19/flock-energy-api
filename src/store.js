@@ -88,14 +88,18 @@ export function buildTree(meters) {
 }
 
 export class MeterStore {
-  #portal;
-  #snapshot = null;
-  #inflight = null;
-
-  constructor(portal) { this.#portal = portal; }
+    #portal;
+    #ttlMs;
+    #snapshot = null;
+    #inflight = null;
+  
+    constructor(portal, { ttlMs = TTL_MS } = {}) {
+      this.#portal = portal;
+      this.#ttlMs = ttlMs;
+    }
 
   async get() {
-    if (this.#snapshot && Date.now() - this.#snapshot.fetchedAt < TTL_MS) return this.#snapshot;
+    if (this.#snapshot && Date.now() - this.#snapshot.fetchedAt < this.#ttlMs) return this.#snapshot;
     try {
       return await this.#refresh();
     } catch (err) {
