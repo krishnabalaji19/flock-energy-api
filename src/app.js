@@ -84,7 +84,7 @@ app.get('/api/v1/hierarchy', wrap(async (req, res) => {
 app.use((err, req, res, _next) => {
   if (err instanceof BadRequest) return res.status(400).json({ error: 'bad_request', message: err.message });
   if (err instanceof PortalError) {
-    const map = { not_found: 404, timeout: 504, unreachable: 502, login_failed: 502, bad_response: 502 };
+    const map = { not_found: 404, timeout: 504, unreachable: 502, login_failed: 502, bad_response: 502, rejected: 502 };
     const status = map[err.code] ?? 502;
     const message = err.code === 'not_found' ? 'Meter not found' : 'Upstream portal problem';
     return res.status(status).json({ error: err.code, message });

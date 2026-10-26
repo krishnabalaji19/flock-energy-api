@@ -43,3 +43,5 @@
   (a 600 s old timestamp is rejected with 401; exact window not measured)
 - A 401 can mean "no session" ({"error":"unauthorized"}) or a rejected signature;
   only the former should trigger a re-login
+  - Stale timestamp (600 s old) -> 401 {"error":"signature_invalid"}, the same code as a
+  missing or wrong signature. A bad-signature 401 is NOT a session problem, so don't re-login.
