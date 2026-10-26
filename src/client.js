@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { createHmac } from 'node:crypto';
 
 const BASE = process.env.PORTAL_URL ?? 'https://urja-ops.flockenergy.tech';
 const TIMEOUT_MS = 10_000;
@@ -72,6 +73,15 @@ export class PortalClient {
       throw new PortalError('Portal returned non-JSON', 'bad_response', res.status);
     }
   }
+
+  async signedGet(path, query) {
+    const { data } = await this.get('/portal/keys');
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const message = ['GET', path, query, timestamp].join('\n');
+    const signature = createHmac('sha256', data.signingSecret).update(message).digest('hex');
+    return this.get(`${path}?${query}`, { 'x-timestamp': timestamp, 'x-signature': signature });
+  }
+
 
   // For testing the re-login path only.
   simulateExpiredSession() {
