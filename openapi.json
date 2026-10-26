@@ -1,0 +1,232 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+      "title": "Urja Meter Ops API",
+      "version": "1.0.0",
+      "description": "A clean JSON API in front of the legacy Urja Meter Ops portal. Portal login, session handling and request signing happen server-side, so callers never touch the portal. Numbers are real numbers, timestamps are ISO 8601."
+    },
+    "servers": [{ "url": "http://localhost:3000" }],
+    "tags": [{ "name": "Meters" }, { "name": "Network" }],
+    "paths": {
+      "/api/v1/meters": {
+        "get": {
+          "tags": ["Meters"],
+          "operationId": "listMeters",
+          "summary": "List meters",
+          "description": "Paginated, filterable list. Filters are case-insensitive and combined with AND. Remember to URL-encode special characters, e.g. make=L%26T.",
+          "parameters": [
+            { "name": "q", "in": "query", "description": "Substring of meter ID or serial number", "schema": { "type": "string" } },
+            { "name": "status", "in": "query", "description": "Installation status, e.g. Installed, Faulty, Decommissioned", "schema": { "type": "string" } },
+            { "name": "make", "in": "query", "description": "Manufacturer, e.g. HPL", "schema": { "type": "string" } },
+            { "name": "dtCode", "in": "query", "description": "Distribution transformer code, e.g. DT-001", "schema": { "type": "string" } },
+            { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 1, "default": 1 } },
+            { "name": "pageSize", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } }
+          ],
+          "responses": {
+            "200": {
+              "description": "A page of meters",
+              "headers": {
+                "X-Data-Fetched-At": { "$ref": "#/components/headers/FetchedAt" },
+                "X-Data-Stale": { "$ref": "#/components/headers/Stale" }
+              },
+              "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MeterList" } } }
+            },
+            "400": { "$ref": "#/components/responses/BadRequest" },
+            "502": { "$ref": "#/components/responses/BadGateway" },
+            "504": { "$ref": "#/components/responses/GatewayTimeout" }
+          }
+        }
+      },
+      "/api/v1/meters/{id}": {
+        "get": {
+          "tags": ["Meters"],
+          "operationId": "getMeter",
+          "summary": "Get one meter",
+          "description": "Full detail including network hierarchy and location. Hierarchy gaps in the portal data are repaired where the correct value can be inferred; every repair is listed in `repairs`.",
+          "parameters": [{ "$ref": "#/components/parameters/MeterId" }],
+          "responses": {
+            "200": {
+              "description": "The meter",
+              "headers": {
+                "X-Data-Fetched-At": { "$ref": "#/components/headers/FetchedAt" },
+                "X-Data-Stale": { "$ref": "#/components/headers/Stale" }
+              },
+              "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MeterDetail" } } }
+            },
+            "400": { "$ref": "#/components/responses/BadRequest" },
+            "404": { "$ref": "#/components/responses/NotFound" },
+            "502": { "$ref": "#/components/responses/BadGateway" },
+            "504": { "$ref": "#/components/responses/GatewayTimeout" }
+          }
+        }
+      },
+      "/api/v1/meters/{id}/consumption": {
+        "get": {
+          "tags": ["Meters"],
+          "operationId": "getConsumption",
+          "summary": "Get consumption readings",
+          "description": "Half-hourly readings, oldest first. `kwh` and `kvah` are cumulative register values, so usage over an interval is the difference between two readings. Portal timestamps carry no timezone; they are assumed to be IST (+05:30). Fetched live from the portal on every call.",
+          "parameters": [{ "$ref": "#/components/parameters/MeterId" }],
+          "responses": {
+            "200": {
+              "description": "Readings",
+              "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Consumption" } } }
+            },
+            "400": { "$ref": "#/components/responses/BadRequest" },
+            "404": { "$ref": "#/components/responses/NotFound" },
+            "502": { "$ref": "#/components/responses/BadGateway" },
+            "504": { "$ref": "#/components/responses/GatewayTimeout" }
+          }
+        }
+      },
+      "/api/v1/hierarchy": {
+        "get": {
+          "tags": ["Network"],
+          "operationId": "getHierarchy",
+          "summary": "Network hierarchy tree",
+          "description": "Zone > circle > division > subdivision > substation > feeder > distribution transformer, with a meter count at every node.",
+          "responses": {
+            "200": {
+              "description": "The tree",
+              "headers": {
+                "X-Data-Fetched-At": { "$ref": "#/components/headers/FetchedAt" },
+                "X-Data-Stale": { "$ref": "#/components/headers/Stale" }
+              },
+              "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HierarchyTree" } } }
+            },
+            "502": { "$ref": "#/components/responses/BadGateway" },
+            "504": { "$ref": "#/components/responses/GatewayTimeout" }
+          }
+        }
+      }
+    },
+    "components": {
+      "parameters": {
+        "MeterId": {
+          "name": "id", "in": "path", "required": true,
+          "description": "Meter ID, e.g. J100001",
+          "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,32}$" }
+        }
+      },
+      "headers": {
+        "FetchedAt": { "description": "When the underlying portal snapshot was fetched", "schema": { "type": "string", "format": "date-time" } },
+        "Stale": { "description": "Present and \"true\" when the portal was unreachable and a cached snapshot was served instead", "schema": { "type": "string", "enum": ["true"] } }
+      },
+      "responses": {
+        "BadRequest": { "description": "Invalid input", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+        "NotFound": { "description": "Meter not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+        "BadGateway": { "description": "The portal is unreachable, rejected the request, or returned something unexpected", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+        "GatewayTimeout": { "description": "The portal did not answer in time", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+      },
+      "schemas": {
+        "Error": {
+          "type": "object",
+          "required": ["error", "message"],
+          "properties": {
+            "error": { "type": "string", "example": "not_found" },
+            "message": { "type": "string", "example": "Meter not found" }
+          }
+        },
+        "MeterSummary": {
+          "type": "object",
+          "properties": {
+            "meterId": { "type": "string", "example": "J100001" },
+            "serialNumber": { "type": "string", "example": "GE84132" },
+            "make": { "type": "string", "example": "L&T" },
+            "phaseType": { "type": "string", "example": "single" },
+            "installStatus": { "type": "string", "example": "Installed" },
+            "dtCode": { "type": "string", "example": "DT-002" }
+          }
+        },
+        "MeterList": {
+          "type": "object",
+          "properties": {
+            "data": { "type": "array", "items": { "$ref": "#/components/schemas/MeterSummary" } },
+            "page": { "type": "integer" },
+            "pageSize": { "type": "integer" },
+            "total": { "type": "integer", "description": "Number of meters matching the filters" }
+          }
+        },
+        "HierarchyNode": {
+          "type": "object",
+          "properties": {
+            "code": { "type": "string", "nullable": true, "example": "C-02" },
+            "name": { "type": "string", "nullable": true, "example": "Circle 2" }
+          }
+        },
+        "Hierarchy": {
+          "type": "object",
+          "properties": {
+            "zone": { "$ref": "#/components/schemas/HierarchyNode" },
+            "circle": { "$ref": "#/components/schemas/HierarchyNode" },
+            "division": { "$ref": "#/components/schemas/HierarchyNode" },
+            "subdivision": { "$ref": "#/components/schemas/HierarchyNode" },
+            "substation": { "$ref": "#/components/schemas/HierarchyNode" },
+            "feeder": { "$ref": "#/components/schemas/HierarchyNode" },
+            "dt": { "$ref": "#/components/schemas/HierarchyNode" }
+          }
+        },
+        "Geo": {
+          "type": "object",
+          "nullable": true,
+          "properties": {
+            "latitude": { "type": "number", "example": 26.8221 },
+            "longitude": { "type": "number", "example": 75.9071 }
+          }
+        },
+        "MeterDetail": {
+          "allOf": [
+            { "$ref": "#/components/schemas/MeterSummary" },
+            {
+              "type": "object",
+              "properties": {
+                "installType": { "type": "string", "example": "CT Operated" },
+                "build": { "type": "string", "enum": ["legacy", "v2"] },
+                "hierarchy": { "$ref": "#/components/schemas/Hierarchy" },
+                "geo": { "$ref": "#/components/schemas/Geo" },
+                "repairs": {
+                  "type": "array",
+                  "description": "Data repairs applied to this record (empty when the portal data was consistent)",
+                  "items": { "type": "string" }
+                }
+              }
+            }
+          ]
+        },
+        "Reading": {
+          "type": "object",
+          "properties": {
+            "timestamp": { "type": "string", "format": "date-time", "nullable": true, "example": "2026-06-23T23:30:00+05:30" },
+            "kwh": { "type": "number", "nullable": true, "description": "Cumulative active energy", "example": 42594.05 },
+            "kvah": { "type": "number", "nullable": true, "description": "Cumulative apparent energy", "example": 46001.58 },
+            "voltR": { "type": "number", "nullable": true, "description": "R-phase voltage", "example": 231 }
+          }
+        },
+        "Consumption": {
+          "type": "object",
+          "properties": {
+            "meterId": { "type": "string" },
+            "count": { "type": "integer", "example": 337 },
+            "readings": { "type": "array", "items": { "$ref": "#/components/schemas/Reading" } }
+          }
+        },
+        "TreeNode": {
+          "type": "object",
+          "properties": {
+            "level": { "type": "string", "enum": ["zone", "circle", "division", "subdivision", "substation", "feeder", "dt"] },
+            "code": { "type": "string", "nullable": true },
+            "name": { "type": "string", "nullable": true },
+            "meterCount": { "type": "integer" },
+            "children": { "type": "array", "items": { "$ref": "#/components/schemas/TreeNode" } }
+          }
+        },
+        "HierarchyTree": {
+          "type": "object",
+          "properties": {
+            "data": { "type": "array", "items": { "$ref": "#/components/schemas/TreeNode" } },
+            "meterCount": { "type": "integer" }
+          }
+        }
+      }
+    }
+  }

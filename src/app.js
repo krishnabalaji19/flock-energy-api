@@ -2,6 +2,8 @@ import express from 'express';
 import { PortalClient, PortalError } from './client.js';
 import { normalizeReading } from './normalize.js';
 import { MeterStore, buildTree } from './store.js';
+import swaggerUi from 'swagger-ui-express';
+import { readFileSync } from 'node:fs';
 
 export const app = express();
 const portal = new PortalClient();
@@ -35,6 +37,10 @@ const summary = (m) => ({
   meterId: m.meterId, serialNumber: m.serialNumber, make: m.make,
   phaseType: m.phaseType, installStatus: m.installStatus, dtCode: m.dtCode,
 });
+
+const spec = JSON.parse(readFileSync(new URL('../openapi.json', import.meta.url), 'utf8'));
+app.get('/openapi.json', (req, res) => res.json(spec));
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(spec));
 
 app.get('/', (req, res) => {
   res.json({ name: 'Urja Meter Ops API', version: '1.0.0', docs: '/docs' });
