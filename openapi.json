@@ -65,7 +65,7 @@
           "tags": ["Meters"],
           "operationId": "getConsumption",
           "summary": "Get consumption readings",
-          "description": "Half-hourly readings, oldest first. `kwh` and `kvah` are cumulative register values, so usage over an interval is the difference between two readings. Portal timestamps carry no timezone; they are assumed to be IST (+05:30). Fetched live from the portal on every call.",
+          "description": "Readings, oldest first (half-hourly for some meters, daily for others). `kwh` and `kvah` are cumulative register values, so usage over an interval is the difference between two readings. Portal timestamps carry no timezone; they are assumed to be IST (+05:30). Fetched live from the portal on every call.",
           "parameters": [{ "$ref": "#/components/parameters/MeterId" }],
           "responses": {
             "200": {

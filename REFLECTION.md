@@ -1,0 +1,21 @@
+# Reflection
+
+## What assumptions did you make?
+
+The portal gives timestamps like `23/06/2026 23:30` with no timezone. I assumed they are Indian Standard Time (+05:30) because the utility is in Jaipur, so my API returns ISO 8601 timestamps with that offset. I assumed `kwh` is a cumulative meter reading and not usage per interval, because in the meters I checked it only ever goes up, by a small amount each half hour. I assumed the data is a frozen snapshot: every meter I looked at has the same 337 readings, ending on 30/06/2026, months before today. I assumed the bulk export is complete, because it returns all 403 meters and ignores the `page` value (I tested `page=2` and got the same 403 records). For the one transformer with two names (DT-007), I assumed the name used by most meters is correct, and I checked it against the portal's own transformer list, which shows "Sanganer DT 7". I also assumed `q` in my meter search should be a case-insensitive "contains" match. I did not check how the portal's own search matches, so that part is a guess.
+
+## Which part was the most difficult, and how did you get unstuck?
+
+The hardest part was the bulk export. Opening `/portal/export` directly gave `signature_invalid`, even though the "Export all meters" button worked with the same login. In the Network tab I compared the two requests and saw that the button's request carried two extra headers, `x-timestamp` and `x-signature`, and that a request called `keys` ran just before it. I searched all sources for `X-Signature` and found nothing, until I realised that the script only loads when the Transformers page is open. After opening that page the search found the file. I pretty-printed the minified code and read the signing function: it joins the method, path, query string and timestamp with newlines and signs that with HMAC-SHA256, using a secret from `keys`. I rebuilt it in Node, and the first signed call returned all 403 meters. I used an AI assistant to help me understand parts of the minified code and to review my work, but I ran every request myself and checked the results.
+
+## If you had another day, what would you improve?
+
+I would add route-level tests that run my API against a fake portal, because right now only the cleaning, signing, caching and repair logic is tested. I would generate `openapi.json` from the validation code so it cannot drift away from the real behaviour. I would make the cache survive restarts and refresh in the background before it goes stale. I would measure the things I left open: how long a session lasts, how fresh a signature timestamp must be, and what `build: legacy|v2` means. If there were time left, I would build a small web client with a hierarchy explorer and a map of meters.
+
+## What mistake did you make while solving this?
+
+I tested old code for a while without knowing it. After I added the new routes, my curl tests kept showing the old behaviour: filters were ignored and `/api/v1/hierarchy` said "Cannot GET". I had closed a terminal without stopping the server, so the old process was still holding port 3000 and my new `npm start` was not the one answering. I found it with `lsof -i :3000`, killed the old process, and everything worked. The lesson I took from it is to check what is actually running before I trust a test result.
+ 
+## If you were reviewing your own submission, what would you criticise?
+
+The OpenAPI file is written by hand, so it can fall out of date when the code changes. There are no tests for the HTTP routes themselves. The cache is only in memory and is lost on restart, and the consumption endpoint is not cached, so every call goes to the portal. My hierarchy repair uses majority vote, which would be wrong if a minority value were the real, newer one, so I record every repair on the meter instead of hiding it. The API has no authentication or rate limiting. Several behaviours are untested: the wrong-password response, how long a session lasts, whether the login needs the `Origin` header, and the exact window for the signature timestamp. I also never found out what `build` means, even though it splits the meters into two groups.

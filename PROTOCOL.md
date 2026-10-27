@@ -25,7 +25,7 @@ Everything here was observed as a normal logged-in user: browser DevTools (Netwo
 |---|---|---|
 | Login | `POST /login` | see section 2 |
 | Meter list / search | `GET /portal/meters/search?q=&page=` | `{data:[{meterId, serialNo, make, phaseType, installStatus, dtCode}], page, pageSize:20, total}`. `q` is a live search (a request per keystroke) on meter ID or serial. |
-| Transformers | `GET /portal/dts?page=` | `{data:[{code, name, feederCode, capacityKva}], total}`, 20 per page. TODO: total = ?, pages = ? |
+| Transformers | `GET /portal/dts?page=` | `{data:[{code, name, feederCode, capacityKva}], total}`, 20 per page. total 40, 2 pages of 20 |
 | Meter location | `GET /portal/meters/{id}/geo` | `{data:{latitude, longitude}}`, **both strings** |
 | Meter consumption | `GET /portal/meters/{id}/energy` | `{data:[{timestamp, kwh, kvah, voltR}]}`, **all strings**, no parameters seen |
 | Signing secret | `GET /portal/keys` | `{data:{signingSecret}}`, needs a session |
@@ -71,7 +71,10 @@ The export carries hierarchy, location and two extra attributes (`installType`, 
 - **One transformer with two names.** `DT-007` is "Sanganer DT 7" on most meters and "Old Malviya Nagar Xfmr" on three (J100400 to J100402). The portal's own transformer list shows "Sanganer DT 7", so the majority name is correct.
 - **Types differ between endpoints.** Coordinates are numbers in the export, but strings from `/geo`. All numeric values from `/energy` are strings.
 - **Timestamps.** `DD/MM/YYYY HH:mm`, with no timezone. I assume IST (+05:30), since the utility is in Jaipur. *(assumption)*
-- **Consumption window.** Every meter I sampled returns 337 rows, from `23/06/2026 23:30` to `30/06/2026 23:30`, half-hourly and oldest first. The data stops in June 2026, so it looks like a frozen snapshot. TODO: result of the all-403 scan: `...`
+- **Consumption window.** - **Energy granularity depends on the meter.** In a sequential scan, 40 meters (J100000 to J100039, judging by scan order) returned 337 half-hourly rows (23/06/2026 23:30 to 30/06/2026 23:30). 58 meters (J100040 to J100097) returned 8 rows, one per day at 00:00 (23/06/2026 to 30/06/2026), and J100098 checked on its own returned 8 daily rows. The split is not explained by `build` (both legacy and v2 meters are in the half-hourly group). Data ends on 30/06/2026 in every case, so it looks like a frozen snapshot.
+- **`kwh` is cumulative.** In all the series I looked at it only increases, so usage over an interval is the difference between two readings.
+- **One malformed series.** J100089 returns 9 rows; the last repeats the timestamp of the previous row with empty `kwh` and `voltR`. My API returns it as-is with `null` for the empty values and does not remove the duplicate.
+- **Failed scan.** In a fast sequential scan of all 403 meters (21 search pages, then one energy request per meter with a 30 ms pause), energy requests failed for the 305 meters from J100098 on, although J100098 itself worked when requested later from a fresh process. Cause not determined *(possibly rate limiting or a per-session limit; unverified)*. Meters from J100099 onward were not individually checked, so their shape is unknown.
 - **`kwh` is cumulative.** It never decreased in the meters I sampled, so usage over an interval is the difference between two readings.
 - **Decommissioned meters** (for example J100000) still return a full week of readings.
 - **`build` is `legacy` (238) or `v2` (165).** Its meaning is unknown. The energy responses of a legacy meter (J100001) and a v2 meter (J100004) have the same shape.
@@ -92,3 +95,4 @@ The export carries hierarchy, location and two extra attributes (`installType`, 
 - `/meters/{id}/__data.json` (a SvelteKit internal request)
 - the "Ops Desk" element
 - behaviour under sustained load, and session expiry time
+- the cause of the failed energy requests in the scan, and the energy shape of J100099 to J100402.
